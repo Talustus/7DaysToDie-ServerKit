@@ -320,28 +320,35 @@ namespace SdtdServerKit
 
         private static void OnGameStartDone()
         {
-            WorldStaticDataHook.ReplaceXmls();
-            GlobalTimer.RegisterSubTimer(new SubTimer(SkyChangeTrigger.Callback, 1) { IsEnabled = true });
-            
-            FunctionManager.Init();
-
             try
             {
-                string[] files = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Mods"), "MapRendering.dll", SearchOption.AllDirectories);
-                if (files.Length == 0)
+                WorldStaticDataHook.ReplaceXmls();
+                GlobalTimer.RegisterSubTimer(new SubTimer(SkyChangeTrigger.Callback, 1) { IsEnabled = true });
+
+                FunctionManager.Init();
+
+                try
                 {
-                    CustomLogger.Warn("It is detected that TFP Mod is not installed, some functions may not be available.");
+                    string[] files = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Mods"), "MapRendering.dll", SearchOption.AllDirectories);
+                    if (files.Length == 0)
+                    {
+                        CustomLogger.Warn("It is detected that TFP Mod is not installed, some functions may not be available.");
+                    }
+
+                    MapTileCache = (MapTileCache)MapRenderer.GetTileCache();
+                }
+                catch (Exception ex)
+                {
+                    CustomLogger.Error(ex, "Load map tile cache failed, Please do not delete the default mod, You can verify the integrity of the game to solve this problem.");
                 }
 
-                MapTileCache = (MapTileCache)MapRenderer.GetTileCache();
+
+                IsGameStartDone = true;
             }
             catch (Exception ex)
             {
-                CustomLogger.Error(ex, "Load map tile cache failed, Please do not delete the default mod, You can verify the integrity of the game to solve this problem.");
+                CustomLogger.Error(ex, "Error in OnGameStartDone");
             }
-
-
-            IsGameStartDone = true;
         }
 
         /// <summary>
@@ -357,15 +364,15 @@ namespace SdtdServerKit
             var builder = new ContainerBuilder();
 
             #region 注册数据库仓储服务
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                string destPath = Path.Combine(AppContext.BaseDirectory, "7DaysToDieServer_Data/MonoBleedingEdge/x86_64", "libdl.so");
-                if (File.Exists(destPath) == false)
-                {
-                    string srcPath = Path.Combine(ModInstance.Path, "libe_sqlite3.so");
-                    File.Copy(srcPath, destPath, true);
-                }
-            }
+            //if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            //{
+            //    string destPath = Path.Combine(AppContext.BaseDirectory, "7DaysToDieServer_Data/MonoBleedingEdge/x86_64", "libdl.so");
+            //    if (File.Exists(destPath) == false)
+            //    {
+            //        string srcPath = Path.Combine(ModInstance.Path, "libe_sqlite3.so");
+            //        File.Copy(srcPath, destPath, true);
+            //    }
+            //}
 
             SqlMapper.AddTypeHandler(new GuidHandler());
 
@@ -415,6 +422,16 @@ namespace SdtdServerKit
         {
             try
             {
+                if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_winsqlite3());
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_sqlite3());
+                }
+                SQLitePCL.raw.FreezeProvider();
+
                 var dbConnection = DbConnectionFactory.Default.CreateConnection(DbAliases.Default);
 
                 string dataSource = ((SqliteConnection)dbConnection).DataSource;
